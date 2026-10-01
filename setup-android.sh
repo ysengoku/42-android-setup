@@ -10,13 +10,18 @@ TARBALL_GLOB="$GOINFRE/downloads/android-studio-*-linux.tar.gz"
 CLT_URL="https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip"
 ENV_FILE="$HOME/.42-android-env.zsh"
 CLI="$SDK/cmdline-tools/latest/bin/android"
-AVD_PROFILE="medium_phone"
+AVDMANAGER="$SDK/cmdline-tools/latest/bin/avdmanager"
+# google_apis (not google_apis_playstore): userdebug build that ships sqlite3
+AVD_IMAGE="system-images/android-36/google_apis/x86_64"
+AVD_DEVICE="medium_phone"
+AVDS=("phone_1" "phone_2")
 
 PACKAGES=(
     "platform-tools"
     "platforms/android-37.0"
     "build-tools/36.0.0"
     "emulator"
+    "$AVD_IMAGE"
 )
 
 echo "==> directories"
@@ -71,12 +76,16 @@ else
 fi
 
 echo "==> avd"
-if "$CLI" --no-metrics emulator list 2>/dev/null | grep -qx "$AVD_PROFILE"; then
-    echo "    $AVD_PROFILE already exists"
-else
-    echo "    creating $AVD_PROFILE (downloads a system image, ~2GB) ..."
-    "$CLI" --no-metrics emulator create "$AVD_PROFILE"
-fi
+# android emulator create can't pick the image (it uses Play Store images),
+# so use avdmanager instead; the image is installed with the sdk packages
+for avd in "${AVDS[@]}"; do
+    if "$AVDMANAGER" list avd -c 2>/dev/null | grep -qx "$avd"; then
+        echo "    $avd already exists"
+    else
+        echo "    creating $avd ..."
+        echo no | "$AVDMANAGER" create avd -n "$avd" -k "${AVD_IMAGE//\//;}" -d "$AVD_DEVICE" > /dev/null
+    fi
+done
 
 echo "==> shell env"
 cat > "$ENV_FILE" <<'ENV'
@@ -111,5 +120,7 @@ echo "    goinfre  $(df -h /goinfre | tail -1 | awk '{print $4}') free"
 echo ""
 echo "==> done"
 echo "    source ~/.zshrc"
-echo "    android --no-metrics emulator start $AVD_PROFILE"
+for avd in "${AVDS[@]}"; do
+    echo "    emulator -avd $avd &"
+done
 echo "    studio.sh"
